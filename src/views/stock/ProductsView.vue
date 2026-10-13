@@ -92,12 +92,20 @@ onMounted(load)
   <div>
     <PageHeader title="Produits" :subtitle="stockStore.currentStock?.name || 'Catalogue'">
       <template #actions>
-        <RouterLink
-          :to="{ name: 'movements' }"
-          class="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-brand-700 ring-1 ring-black/5"
-        >
-          Mouvements
-        </RouterLink>
+        <div class="flex gap-2">
+          <RouterLink
+            :to="{ name: 'movement-new', query: { type: 'entry' } }"
+            class="rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white"
+          >
+            + Stock
+          </RouterLink>
+          <RouterLink
+            :to="{ name: 'movements' }"
+            class="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-brand-700 ring-1 ring-black/5"
+          >
+            Mouvements
+          </RouterLink>
+        </div>
       </template>
     </PageHeader>
 

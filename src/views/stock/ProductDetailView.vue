@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppBadge from '@/components/ui/AppBadge.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -8,11 +8,16 @@ import AppInput from '@/components/ui/AppInput.vue'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import { categoriesApi, labelsApi, productsApi, unitsApi } from '@/services/products'
-import { stocksApi } from '@/services/stock'
+import {
+  isOutboundType,
+  movementTypeLabel,
+  movementsApi,
+  stocksApi,
+} from '@/services/stock'
 import { useAuthStore } from '@/stores/auth'
 import { useStockStore } from '@/stores/stock'
 import { useUiStore } from '@/stores/ui'
-import { formatMoney, unwrapItem, unwrapList } from '@/utils/format'
+import { formatDateTime, formatMoney, unwrapItem, unwrapList } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,10 +29,12 @@ const isNew = computed(() => route.params.id === 'new')
 const tab = ref('info')
 const loading = ref(true)
 const saving = ref(false)
-const stockQty = ref(0)
 const categories = ref([])
 const labels = ref([])
 const units = ref([])
+const stockRows = ref([])
+const history = ref([])
+const historyLoading = ref(false)
 
 const form = reactive({
   name: '',
@@ -54,6 +61,52 @@ const unitOptions = computed(() =>
   units.value.map((item) => ({ value: item.id, label: item.name || item.code })),
 )
 
+const currentStockRow = computed(() => {
+  if (!stockStore.currentStockId) return stockRows.value[0] || null
+  return (
+    stockRows.value.find((row) => Number(row.stock_id) === Number(stockStore.currentStockId)) ||
+    null
+  )
+})
+
+const totalOnHand = computed(() =>
+  stockRows.value.reduce((sum, row) => sum + Number(row.quantity_on_hand || 0), 0),
+)
+const totalAvailable = computed(() =>
+  stockRows.value.reduce(
+    (sum, row) => sum + Number(row.quantity_available ?? row.quantity_on_hand ?? 0),
+    0,
+  ),
+)
+const totalReserved = computed(() =>
+  stockRows.value.reduce((sum, row) => sum + Number(row.quantity_reserved || 0), 0),
+)
+const currentQty = computed(() =>
+  Number(currentStockRow.value?.quantity_available ?? currentStockRow.value?.quantity_on_hand ?? 0),
+)
+const purchaseValue = computed(
+  () => totalOnHand.value * Number(form.purchase_price || 0),
+)
+const sellingValue = computed(
+  () => totalOnHand.value * Number(form.selling_price || 0),
+)
+const marginValue = computed(() => sellingValue.value - purchaseValue.value)
+
+const stockTone = computed(() => {
+  const qty = currentQty.value
+  const min = Number(form.min_stock_level || 0)
+  if (qty <= 0) return 'danger'
+  if (qty <= min) return 'warning'
+  return 'success'
+})
+
+const stockLabel = computed(() => {
+  const qty = currentQty.value
+  if (qty <= 0) return 'Rupture'
+  if (qty <= Number(form.min_stock_level || 0)) return 'Stock faible'
+  return 'En stock'
+})
+
 async function loadMeta() {
   const [cats, labs, uns] = await Promise.all([
     categoriesApi.list(),
@@ -67,6 +120,47 @@ async function loadMeta() {
     auth.company?.default_currency_id ||
     auth.company?.default_currency?.id ||
     form.currency_id
+}
+
+async function loadStockRows(productId) {
+  const items = unwrapList(await stocksApi.items({ product_id: productId, per_page: 100 }))
+  stockRows.value = items
+}
+
+async function loadHistory(productId) {
+  historyLoading.value = true
+  try {
+    const response = await movementsApi.list({
+      per_page: 50,
+      stock_id: stockStore.currentStockId || undefined,
+    })
+    const movements = unwrapList(response)
+    const rows = []
+    movements.forEach((movement) => {
+      ;(movement.lines || []).forEach((line) => {
+        if (Number(line.product_id) !== Number(productId)) return
+        rows.push({
+          id: `${movement.id}-${line.id}`,
+          movement_id: movement.id,
+          type: movement.movement_type,
+          status: movement.status,
+          reference: movement.reference,
+          reason: movement.reason,
+          quantity: Number(line.quantity || 0),
+          unit_cost: line.unit_cost,
+          source: movement.source_stock?.name,
+          destination: movement.destination_stock?.name,
+          at: movement.validated_at || movement.document_date || movement.created_at,
+          outbound: isOutboundType(movement.movement_type),
+        })
+      })
+    })
+    history.value = rows.sort((a, b) => new Date(b.at) - new Date(a.at))
+  } catch {
+    history.value = []
+  } finally {
+    historyLoading.value = false
+  }
 }
 
 async function loadProduct() {
@@ -94,11 +188,7 @@ async function loadProduct() {
       currency_id: product.currency_id || form.currency_id,
       is_active: product.is_active !== false,
     })
-    if (stockStore.currentStockId) {
-      const items = unwrapList(await stocksApi.itemsByStock(stockStore.currentStockId))
-      const match = items.find((item) => Number(item.product_id) === Number(product.id))
-      stockQty.value = Number(match?.quantity_available ?? match?.quantity_on_hand ?? 0)
-    }
+    await Promise.all([loadStockRows(product.id), loadHistory(product.id)])
   } catch (error) {
     ui.error(error.message || 'Produit introuvable')
     router.replace({ name: 'products' })
@@ -147,6 +237,12 @@ async function remove() {
   }
 }
 
+watch(tab, (value) => {
+  if (value === 'history' && !isNew.value && !history.value.length) {
+    loadHistory(route.params.id)
+  }
+})
+
 onMounted(loadProduct)
 </script>
 
@@ -158,9 +254,7 @@ onMounted(loadProduct)
       :back-to="{ name: 'products' }"
     >
       <template #actions>
-        <AppBadge v-if="!isNew" :tone="stockQty > 0 ? 'success' : 'danger'">
-          {{ stockQty > 0 ? 'En stock' : 'Rupture' }}
-        </AppBadge>
+        <AppBadge v-if="!isNew" :tone="stockTone">{{ stockLabel }}</AppBadge>
       </template>
     </PageHeader>
 
@@ -198,25 +292,126 @@ onMounted(loadProduct)
         <AppInput v-model="form.min_stock_level" label="Stock minimum" type="number" />
       </div>
 
-      <AppCard v-show="tab === 'stock'">
-        <p class="text-sm text-muted">Quantité disponible</p>
-        <p class="mt-1 text-3xl font-bold text-ink">{{ stockQty }}</p>
-        <p class="mt-2 text-sm text-muted">
-          Magasin : {{ stockStore.currentStock?.name || '—' }}
-        </p>
-        <p class="mt-1 text-sm text-muted">
-          Valeur stock ≈ {{ formatMoney(stockQty * Number(form.selling_price || 0), auth.currencyCode) }}
-        </p>
-      </AppCard>
+      <div v-show="tab === 'stock'" class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <AppCard class="!p-3">
+            <p class="text-[11px] text-muted">Disponible (magasin)</p>
+            <p class="mt-1 text-2xl font-bold text-ink">{{ currentQty }}</p>
+            <p class="text-xs text-muted">{{ stockStore.currentStock?.name || '—' }}</p>
+          </AppCard>
+          <AppCard class="!p-3">
+            <p class="text-[11px] text-muted">Total tous magasins</p>
+            <p class="mt-1 text-2xl font-bold text-ink">{{ totalAvailable }}</p>
+            <p class="text-xs text-muted">Réservé : {{ totalReserved }}</p>
+          </AppCard>
+        </div>
 
-      <AppCard v-show="tab === 'history'">
-        <p class="text-sm text-muted">
-          Consultez l’historique détaillé dans
-          <RouterLink :to="{ name: 'movements' }" class="font-semibold text-brand-600">Mouvements de stock</RouterLink>.
-        </p>
-      </AppCard>
+        <AppCard class="space-y-2">
+          <h3 class="font-semibold text-ink">Valeur du stock</h3>
+          <div class="flex justify-between text-sm">
+            <span class="text-muted">À l’achat</span>
+            <span class="font-semibold">{{ formatMoney(purchaseValue, auth.currencyCode) }}</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-muted">À la vente</span>
+            <span class="font-semibold text-brand-700">{{ formatMoney(sellingValue, auth.currencyCode) }}</span>
+          </div>
+          <div class="flex justify-between border-t border-gray-100 pt-2 text-sm">
+            <span class="text-muted">Marge potentielle</span>
+            <span class="font-bold" :class="marginValue >= 0 ? 'text-success-700' : 'text-danger-600'">
+              {{ formatMoney(marginValue, auth.currencyCode) }}
+            </span>
+          </div>
+          <p class="text-xs text-muted">
+            Sur {{ totalOnHand }} unité(s) · min. {{ form.min_stock_level || 0 }}
+          </p>
+        </AppCard>
 
-      <div class="mt-6 grid grid-cols-2 gap-3">
+        <AppCard>
+          <h3 class="mb-3 font-semibold text-ink">Par magasin</h3>
+          <div v-if="stockRows.length" class="space-y-2">
+            <div
+              v-for="row in stockRows"
+              :key="row.id"
+              class="flex items-center justify-between rounded-xl bg-surface px-3 py-2 text-sm"
+            >
+              <div>
+                <p class="font-medium text-ink">{{ row.stock?.name || `Stock #${row.stock_id}` }}</p>
+                <p class="text-xs text-muted">
+                  Réservé {{ row.quantity_reserved || 0 }}
+                </p>
+              </div>
+              <p class="font-bold text-ink">
+                {{ row.quantity_available ?? row.quantity_on_hand ?? 0 }}
+              </p>
+            </div>
+          </div>
+          <p v-else class="text-sm text-muted">Aucune quantité en stock pour ce produit.</p>
+        </AppCard>
+
+        <div v-if="!isNew" class="grid grid-cols-2 gap-2">
+          <AppButton
+            variant="soft"
+            @click="router.push({ name: 'movement-new', query: { type: 'entry', product_id: route.params.id } })"
+          >
+            + Entrée
+          </AppButton>
+          <AppButton
+            variant="secondary"
+            @click="router.push({ name: 'movement-new', query: { type: 'exit', product_id: route.params.id } })"
+          >
+            − Sortie
+          </AppButton>
+        </div>
+      </div>
+
+      <div v-show="tab === 'history'" class="space-y-2">
+        <p v-if="historyLoading" class="py-8 text-center text-sm text-muted">Chargement…</p>
+        <template v-else>
+          <AppCard v-for="item in history" :key="item.id" class="!p-3">
+            <div class="flex items-center gap-3">
+              <div
+                class="flex size-10 items-center justify-center rounded-full text-sm font-bold"
+                :class="item.outbound ? 'bg-danger-50 text-danger-700' : 'bg-success-50 text-success-700'"
+              >
+                {{ item.outbound ? '↓' : '↑' }}
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-semibold text-ink">
+                  {{ item.reason || item.reference || movementTypeLabel(item.type) }}
+                </p>
+                <p class="truncate text-xs text-muted">
+                  {{ movementTypeLabel(item.type) }}
+                  <span v-if="item.source"> · {{ item.source }}</span>
+                  <span v-if="item.destination"> → {{ item.destination }}</span>
+                </p>
+                <p class="text-[11px] text-muted">{{ formatDateTime(item.at) }}</p>
+              </div>
+              <div class="text-right">
+                <p class="font-bold" :class="item.outbound ? 'text-danger-600' : 'text-success-700'">
+                  {{ item.outbound ? '-' : '+' }}{{ item.quantity }}
+                </p>
+                <AppBadge class="mt-1" :tone="item.status === 'validated' ? 'success' : 'neutral'">
+                  {{ item.status }}
+                </AppBadge>
+              </div>
+            </div>
+          </AppCard>
+          <p v-if="!history.length" class="py-8 text-center text-sm text-muted">
+            Aucun mouvement pour ce produit
+          </p>
+          <AppButton
+            v-if="!isNew"
+            block
+            variant="ghost"
+            @click="router.push({ name: 'movements' })"
+          >
+            Voir tous les mouvements
+          </AppButton>
+        </template>
+      </div>
+
+      <div v-if="tab === 'info'" class="mt-6 grid grid-cols-2 gap-3">
         <AppButton v-if="!isNew" variant="danger" @click="remove">Supprimer</AppButton>
         <AppButton :class="isNew ? 'col-span-2' : ''" :loading="saving" @click="save">
           Enregistrer

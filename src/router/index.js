@@ -49,6 +49,12 @@ const router = createRouter({
           meta: { title: 'Mouvements', tab: 'stock', hideNav: true },
         },
         {
+          path: 'stock/movements/new',
+          name: 'movement-new',
+          component: () => import('@/views/stock/NewMovementView.vue'),
+          meta: { title: 'Nouveau mouvement', tab: 'stock', hideNav: true },
+        },
+        {
           path: 'ventes',
           name: 'sales',
           component: () => import('@/views/sales/NewSaleView.vue'),
