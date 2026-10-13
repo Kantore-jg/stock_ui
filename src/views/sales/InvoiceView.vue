@@ -87,8 +87,8 @@ onMounted(load)
       <AppCard class="mb-4 space-y-4 print:shadow-none print:ring-0">
         <div class="flex items-start justify-between gap-3">
           <div>
-            <p class="text-lg font-bold text-brand-700">Stock Manager</p>
-            <p class="text-xs text-muted">{{ auth.company?.name || 'Magasin' }}</p>
+            <p class="text-lg font-bold text-brand-700">{{ auth.company?.name || 'Magasin' }}</p>
+            <p class="text-xs text-muted">--------------------------------</p>
           </div>
           <div class="text-right text-xs text-muted">
             <p class="font-semibold text-ink">{{ invoiceNumber }}</p>

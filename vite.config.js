@@ -4,19 +4,23 @@ import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import basicSsl from '@vitejs/plugin-basic-ssl'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const apiTarget = env.VITE_API_URL || 'http://localhost:8000'
+  const useHttps = env.VITE_DEV_HTTPS !== 'false'
 
   return {
     plugins: [
       vue(),
       tailwindcss(),
+      ...(useHttps ? [basicSsl()] : []),
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'icons/apple-touch-icon.png'],
         manifest: {
+          id: '/',
           name: 'Stock Manager',
           short_name: 'Stock',
           description: 'Gestion de stock simple et efficace',
@@ -25,20 +29,23 @@ export default defineConfig(({ mode }) => {
           display: 'standalone',
           orientation: 'portrait',
           start_url: '/',
+          scope: '/',
           lang: 'fr',
           icons: [
             {
-              src: 'icons/icon-192.png',
+              src: '/icons/icon-192.png',
               sizes: '192x192',
               type: 'image/png',
+              purpose: 'any',
             },
             {
-              src: 'icons/icon-512.png',
+              src: '/icons/icon-512.png',
               sizes: '512x512',
               type: 'image/png',
+              purpose: 'any',
             },
             {
-              src: 'icons/icon-512.png',
+              src: '/icons/icon-512-maskable.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
@@ -65,6 +72,8 @@ export default defineConfig(({ mode }) => {
         },
         devOptions: {
           enabled: true,
+          type: 'module',
+          navigateFallback: 'index.html',
         },
       }),
     ],
@@ -74,10 +83,13 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
+      host: true,
+      https: useHttps,
       proxy: {
         '/api': {
           target: apiTarget,
           changeOrigin: true,
+          secure: false,
         },
       },
     },
