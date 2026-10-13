@@ -9,6 +9,11 @@ import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { formatDate, formatMoney, unwrapItem } from '@/utils/format'
 
+function formatQty(value) {
+  const amount = Number(value || 0)
+  return Number.isInteger(amount) ? String(amount) : amount.toLocaleString('fr-FR', { maximumFractionDigits: 2 })
+}
+
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -88,18 +93,34 @@ onMounted(load)
         </div>
 
         <div class="overflow-hidden rounded-xl border border-gray-100">
-          <div class="grid grid-cols-[1fr_auto_auto_auto] gap-2 bg-surface px-3 py-2 text-[11px] font-semibold uppercase text-muted">
-            <span>Produit</span><span>Qté</span><span>PU</span><span>Total</span>
+          <div
+            class="grid grid-cols-[minmax(0,1fr)_2.75rem_5.75rem_6.25rem] gap-1 bg-surface px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted"
+          >
+            <span class="text-left">Produit</span>
+            <span class="text-right">Qté</span>
+            <span class="text-right">PU</span>
+            <span class="text-right">Total</span>
           </div>
           <div
             v-for="item in items"
             :key="item.id"
-            class="grid grid-cols-[1fr_auto_auto_auto] gap-2 border-t border-gray-50 px-3 py-2 text-sm"
+            class="grid grid-cols-[minmax(0,1fr)_2.75rem_5.75rem_6.25rem] gap-1 border-t border-gray-50 px-3 py-2 text-xs"
           >
-            <span class="truncate">{{ item.product?.name || item.product_name_snapshot || `Produit #${item.product_id}` }}</span>
-            <span>{{ item.quantity }}</span>
-            <span>{{ formatMoney(item.unit_price, currency) }}</span>
-            <span class="font-semibold">{{ formatMoney(item.line_total || item.total || Number(item.unit_price) * Number(item.quantity), currency) }}</span>
+            <span class="min-w-0 truncate text-left">
+              {{ item.product?.name || item.product_name_snapshot || `Produit #${item.product_id}` }}
+            </span>
+            <span class="text-right tabular-nums">{{ formatQty(item.quantity) }}</span>
+            <span class="text-right tabular-nums leading-tight">
+              {{ formatMoney(item.unit_price, currency) }}
+            </span>
+            <span class="text-right font-semibold tabular-nums leading-tight">
+              {{
+                formatMoney(
+                  item.line_total || item.total || Number(item.unit_price) * Number(item.quantity),
+                  currency,
+                )
+              }}
+            </span>
           </div>
         </div>
 
