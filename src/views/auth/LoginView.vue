@@ -35,7 +35,7 @@ async function submit() {
 </script>
 
 <template>
-  <div class="flex flex-1 flex-col justify-center">
+  <div class="flex h-full min-h-0 flex-1 flex-col justify-center">
     <div class="mb-8 text-center text-white">
       <div class="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl bg-brand-600 shadow-lg shadow-brand-900/40">
         <svg class="size-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
