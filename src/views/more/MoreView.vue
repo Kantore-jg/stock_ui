@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import AppCard from '@/components/ui/AppCard.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
@@ -11,7 +12,7 @@ const stockStore = useStockStore()
 const ui = useUiStore()
 const router = useRouter()
 
-const links = [
+const tenantLinks = [
   { label: 'Caisses', to: { name: 'cash' }, hint: 'Ouvrir / fermer / mouvements' },
   { label: 'Factures', to: { name: 'invoices' }, hint: 'Consulter et rechercher' },
   { label: 'Historique des ventes', to: { name: 'sales-history' }, hint: 'Ventes et paiements partiels' },
@@ -19,6 +20,15 @@ const links = [
   { label: 'Mouvements de stock', to: { name: 'movements' }, hint: 'Entrées et sorties' },
   { label: 'Nouvelle vente', to: { name: 'sales' }, hint: 'Point de vente' },
 ]
+
+const links = computed(() => {
+  if (auth.isSuperAdmin) {
+    return [
+      { label: 'Entreprises', to: { name: 'admin-companies' }, hint: 'Créer / activer les tenants' },
+    ]
+  }
+  return tenantLinks
+})
 
 async function logout() {
   await auth.logout()
@@ -29,24 +39,28 @@ async function logout() {
 
 <template>
   <div>
-    <PageHeader title="Plus" subtitle="Paramètres et raccourcis" />
+    <PageHeader title="Plus" :subtitle="auth.isSuperAdmin ? 'Superadmin plateforme' : 'Paramètres et raccourcis'" />
 
     <AppCard class="mb-4">
       <p class="text-sm text-muted">Connecté en tant que</p>
       <p class="mt-1 font-semibold text-ink">{{ auth.user?.name }}</p>
       <p class="text-sm text-muted">{{ auth.user?.email }}</p>
-      <p class="mt-3 text-sm text-muted">Entreprise</p>
-      <p class="font-semibold text-ink">{{ auth.company?.name || '—' }}</p>
-      <label class="mt-4 block text-sm font-medium text-ink">Magasin courant</label>
-      <select
-        class="mt-1.5 w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm"
-        :value="stockStore.currentStockId || ''"
-        @change="stockStore.setCurrentStock($event.target.value)"
-      >
-        <option v-for="stock in stockStore.stocks" :key="stock.id" :value="stock.id">
-          {{ stock.name }}
-        </option>
-      </select>
+      <p v-if="auth.isSuperAdmin" class="mt-2 text-xs font-semibold text-brand-700">Superadmin</p>
+      <template v-else>
+        <p class="mt-3 text-sm text-muted">Entreprise</p>
+        <p class="font-semibold text-ink">{{ auth.company?.name || '—' }}</p>
+        <p class="text-xs text-muted">ID entreprise : {{ auth.user?.company_id || '—' }}</p>
+        <label class="mt-4 block text-sm font-medium text-ink">Magasin courant</label>
+        <select
+          class="mt-1.5 w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm"
+          :value="stockStore.currentStockId || ''"
+          @change="stockStore.setCurrentStock($event.target.value)"
+        >
+          <option v-for="stock in stockStore.stocks" :key="stock.id" :value="stock.id">
+            {{ stock.name }}
+          </option>
+        </select>
+      </template>
     </AppCard>
 
     <div class="space-y-2">

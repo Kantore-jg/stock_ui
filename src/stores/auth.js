@@ -14,6 +14,7 @@ export const useAuthStore = defineStore('auth', () => {
   const bootstrapped = ref(false)
 
   const isAuthenticated = computed(() => Boolean(token.value))
+  const isSuperAdmin = computed(() => Boolean(user.value?.is_super_admin))
   const company = computed(() => user.value?.company || null)
   const currencyCode = computed(
     () => company.value?.default_currency?.code || company.value?.defaultCurrency?.code || 'BIF',
@@ -85,6 +86,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading,
     bootstrapped,
     isAuthenticated,
+    isSuperAdmin,
     company,
     currencyCode,
     login,

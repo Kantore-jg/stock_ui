@@ -108,6 +108,12 @@ const router = createRouter({
           component: () => import('@/views/more/MoreView.vue'),
           meta: { title: 'Plus', tab: 'more' },
         },
+        {
+          path: 'admin/entreprises',
+          name: 'admin-companies',
+          component: () => import('@/views/admin/CompaniesView.vue'),
+          meta: { title: 'Entreprises', tab: 'more', hideNav: true, requiresSuperAdmin: true },
+        },
       ],
     },
     {
@@ -135,7 +141,15 @@ router.beforeEach(async (to) => {
   }
 
   if (to.meta.guest && auth.isAuthenticated) {
+    return auth.isSuperAdmin ? { name: 'admin-companies' } : { name: 'home' }
+  }
+
+  if (to.meta.requiresSuperAdmin && !auth.isSuperAdmin) {
     return { name: 'home' }
+  }
+
+  if (auth.isSuperAdmin && to.name === 'home') {
+    return { name: 'admin-companies' }
   }
 
   return true
