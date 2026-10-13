@@ -1,0 +1,233 @@
+<script setup>
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppInput from '@/components/ui/AppInput.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import SearchBar from '@/components/ui/SearchBar.vue'
+import { customersApi } from '@/services/customers'
+import { productsApi } from '@/services/products'
+import { paymentMethodsApi, salesApi } from '@/services/sales'
+import { useAuthStore } from '@/stores/auth'
+import { useStockStore } from '@/stores/stock'
+import { useUiStore } from '@/stores/ui'
+import { formatMoney, unwrapItem, unwrapList } from '@/utils/format'
+
+const auth = useAuthStore()
+const stockStore = useStockStore()
+const ui = useUiStore()
+const router = useRouter()
+
+const loading = ref(true)
+const saving = ref(false)
+const search = ref('')
+const customers = ref([])
+const products = ref([])
+const paymentMethods = ref([])
+const lines = ref([])
+
+const form = reactive({
+  customer_id: '',
+  payment_method_id: '',
+  amount_received: '',
+  tax_rate: '18',
+})
+
+const customerOptions = computed(() => [
+  { value: '', label: 'Client passage' },
+  ...customers.value.map((item) => ({ value: item.id, label: item.name })),
+])
+const paymentOptions = computed(() =>
+  paymentMethods.value.map((item) => ({ value: item.id, label: item.name })),
+)
+
+const filteredProducts = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return products.value.slice(0, 8)
+  return products.value
+    .filter((product) =>
+      [product.name, product.sku, product.barcode]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q)),
+    )
+    .slice(0, 8)
+})
+
+const subtotal = computed(() =>
+  lines.value.reduce((sum, line) => sum + Number(line.unit_price) * Number(line.quantity), 0),
+)
+const taxAmount = computed(() => (subtotal.value * Number(form.tax_rate || 0)) / 100)
+const total = computed(() => subtotal.value + taxAmount.value)
+
+function addProduct(product) {
+  const existing = lines.value.find((line) => line.product_id === product.id)
+  if (existing) {
+    existing.quantity += 1
+    return
+  }
+  lines.value.push({
+    product_id: product.id,
+    name: product.name,
+    unit_price: Number(product.selling_price || 0),
+    quantity: 1,
+    tax_rate: Number(form.tax_rate || 0),
+  })
+  search.value = ''
+}
+
+function changeQty(line, delta) {
+  line.quantity = Math.max(1, Number(line.quantity) + delta)
+}
+
+function removeLine(index) {
+  lines.value.splice(index, 1)
+}
+
+async function load() {
+  loading.value = true
+  try {
+    const [customersRes, productsRes, methodsRes] = await Promise.all([
+      customersApi.list({ per_page: 100 }),
+      productsApi.list({ per_page: 100 }),
+      paymentMethodsApi.list(),
+    ])
+    customers.value = unwrapList(customersRes)
+    products.value = unwrapList(productsRes)
+    paymentMethods.value = unwrapList(methodsRes)
+    if (paymentMethods.value[0]) form.payment_method_id = paymentMethods.value[0].id
+  } catch (error) {
+    ui.error(error.message || 'Chargement impossible')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function submit() {
+  if (!stockStore.currentStockId) {
+    ui.error('Aucun magasin sélectionné')
+    return
+  }
+  if (!lines.value.length) {
+    ui.error('Ajoutez au moins un produit')
+    return
+  }
+  saving.value = true
+  try {
+    const currencyId =
+      auth.company?.default_currency_id ||
+      auth.company?.default_currency?.id ||
+      products.value[0]?.currency_id
+    const created = unwrapItem(
+      await salesApi.create({
+        stock_id: stockStore.currentStockId,
+        customer_id: form.customer_id ? Number(form.customer_id) : null,
+        sale_date: new Date().toISOString().slice(0, 10),
+        currency_id: Number(currencyId),
+        items: lines.value.map((line) => ({
+          product_id: line.product_id,
+          quantity: Number(line.quantity),
+          unit_price: Number(line.unit_price),
+          tax_rate: Number(line.tax_rate || form.tax_rate || 0),
+        })),
+      }),
+    )
+    const validated = unwrapItem(await salesApi.validate(created.id))
+    const amount = Number(form.amount_received || total.value)
+    if (amount > 0 && form.payment_method_id) {
+      await salesApi.addPayment(validated.id || created.id, {
+        payment_method_id: Number(form.payment_method_id),
+        amount,
+        payment_date: new Date().toISOString().slice(0, 10),
+        currency_id: Number(currencyId),
+      })
+    }
+    ui.success('Vente validée')
+    router.push({ name: 'invoice', params: { id: validated.id || created.id } })
+  } catch (error) {
+    ui.error(error.message || 'Validation impossible')
+  } finally {
+    saving.value = false
+  }
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <div>
+    <PageHeader title="Nouvelle vente" :subtitle="stockStore.currentStock?.name || 'POS'" />
+
+    <div v-if="loading" class="py-16 text-center text-sm text-muted">Chargement…</div>
+    <div v-else class="space-y-4">
+      <div class="flex items-end gap-2">
+        <div class="flex-1">
+          <AppSelect v-model="form.customer_id" label="Client" :options="customerOptions" placeholder="Client" />
+        </div>
+        <RouterLink
+          :to="{ name: 'customers' }"
+          class="mb-0.5 flex size-11 items-center justify-center rounded-xl bg-brand-600 text-xl text-white"
+        >
+          +
+        </RouterLink>
+      </div>
+
+      <SearchBar v-model="search" placeholder="Ajouter un produit…" show-scan />
+      <div v-if="search || !lines.length" class="space-y-2">
+        <button
+          v-for="product in filteredProducts"
+          :key="product.id"
+          type="button"
+          class="flex w-full items-center justify-between rounded-xl bg-white px-3 py-3 text-left text-sm ring-1 ring-black/5"
+          @click="addProduct(product)"
+        >
+          <span>
+            <span class="font-semibold text-ink">{{ product.name }}</span>
+            <span class="block text-xs text-muted">{{ product.sku }}</span>
+          </span>
+          <span class="font-semibold text-brand-700">
+            {{ formatMoney(product.selling_price, auth.currencyCode) }}
+          </span>
+        </button>
+      </div>
+
+      <div class="space-y-2">
+        <AppCard v-for="(line, index) in lines" :key="line.product_id" class="!p-3">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <p class="font-semibold text-ink">{{ line.name }}</p>
+              <p class="text-xs text-muted">{{ formatMoney(line.unit_price, auth.currencyCode) }}</p>
+            </div>
+            <button type="button" class="text-danger-600" @click="removeLine(index)">
+              <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 7h12M9 7V5h6v2m-7 3v8m4-8v8m4-8v8M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12" />
+              </svg>
+            </button>
+          </div>
+          <div class="mt-3 flex items-center gap-3">
+            <button type="button" class="flex size-8 items-center justify-center rounded-lg bg-surface" @click="changeQty(line, -1)">−</button>
+            <span class="min-w-8 text-center font-semibold">{{ line.quantity }}</span>
+            <button type="button" class="flex size-8 items-center justify-center rounded-lg bg-surface" @click="changeQty(line, 1)">+</button>
+            <span class="ml-auto font-bold text-ink">
+              {{ formatMoney(line.unit_price * line.quantity, auth.currencyCode) }}
+            </span>
+          </div>
+        </AppCard>
+      </div>
+
+      <AppCard class="space-y-2 text-sm">
+        <div class="flex justify-between"><span class="text-muted">Total HT</span><span>{{ formatMoney(subtotal, auth.currencyCode) }}</span></div>
+        <div class="flex justify-between"><span class="text-muted">TVA ({{ form.tax_rate }}%)</span><span>{{ formatMoney(taxAmount, auth.currencyCode) }}</span></div>
+        <div class="flex justify-between border-t border-gray-100 pt-2 text-base font-bold">
+          <span>Total TTC</span><span>{{ formatMoney(total, auth.currencyCode) }}</span>
+        </div>
+      </AppCard>
+
+      <AppSelect v-model="form.payment_method_id" label="Mode de paiement" :options="paymentOptions" />
+      <AppInput v-model="form.amount_received" label="Montant reçu" type="number" :placeholder="String(total)" />
+
+      <AppButton block :loading="saving" @click="submit">Valider la vente</AppButton>
+    </div>
+  </div>
+</template>
