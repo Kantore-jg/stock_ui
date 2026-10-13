@@ -6,6 +6,7 @@ defineProps({
   placeholder: { type: String, default: 'Sélectionner' },
   error: { type: String, default: '' },
   disabled: { type: Boolean, default: false },
+  allowEmpty: { type: Boolean, default: false },
 })
 
 defineEmits(['update:modelValue'])
@@ -21,8 +22,10 @@ defineEmits(['update:modelValue'])
       :class="error ? 'border-danger-500' : ''"
       @change="$emit('update:modelValue', $event.target.value)"
     >
-      <option value="" disabled>{{ placeholder }}</option>
-      <option v-for="option in options" :key="option.value" :value="option.value">
+      <option v-if="allowEmpty || placeholder" value="" :disabled="!allowEmpty">
+        {{ placeholder }}
+      </option>
+      <option v-for="option in options" :key="String(option.value)" :value="option.value">
         {{ option.label }}
       </option>
     </select>

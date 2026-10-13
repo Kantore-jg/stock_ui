@@ -61,6 +61,18 @@ const router = createRouter({
           meta: { title: 'Nouvelle vente', tab: 'sales' },
         },
         {
+          path: 'ventes/historique',
+          name: 'sales-history',
+          component: () => import('@/views/sales/SalesHistoryView.vue'),
+          meta: { title: 'Historique des ventes', tab: 'more', hideNav: true },
+        },
+        {
+          path: 'factures',
+          name: 'invoices',
+          component: () => import('@/views/sales/InvoicesView.vue'),
+          meta: { title: 'Factures', tab: 'more', hideNav: true },
+        },
+        {
           path: 'ventes/:id/facture',
           name: 'invoice',
           component: () => import('@/views/sales/InvoiceView.vue'),
@@ -71,6 +83,12 @@ const router = createRouter({
           name: 'payments',
           component: () => import('@/views/sales/PaymentsView.vue'),
           meta: { title: 'Paiements', tab: 'sales', hideNav: true },
+        },
+        {
+          path: 'caisses',
+          name: 'cash',
+          component: () => import('@/views/cash/CashView.vue'),
+          meta: { title: 'Caisses', tab: 'more', hideNav: true },
         },
         {
           path: 'clients',

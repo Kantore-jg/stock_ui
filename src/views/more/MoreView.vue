@@ -12,6 +12,9 @@ const ui = useUiStore()
 const router = useRouter()
 
 const links = [
+  { label: 'Caisses', to: { name: 'cash' }, hint: 'Ouvrir / fermer / mouvements' },
+  { label: 'Factures', to: { name: 'invoices' }, hint: 'Consulter et rechercher' },
+  { label: 'Historique des ventes', to: { name: 'sales-history' }, hint: 'Ventes et paiements partiels' },
   { label: 'Dépenses', to: { name: 'expenses' }, hint: 'Suivi des frais' },
   { label: 'Mouvements de stock', to: { name: 'movements' }, hint: 'Entrées et sorties' },
   { label: 'Nouvelle vente', to: { name: 'sales' }, hint: 'Point de vente' },

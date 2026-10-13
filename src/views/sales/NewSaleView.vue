@@ -172,7 +172,16 @@ onMounted(load)
 
 <template>
   <div>
-    <PageHeader title="Nouvelle vente" :subtitle="stockStore.currentStock?.name || 'POS'" />
+    <PageHeader title="Nouvelle vente" :subtitle="stockStore.currentStock?.name || 'POS'">
+      <template #actions>
+        <RouterLink
+          :to="{ name: 'sales-history' }"
+          class="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-brand-700 ring-1 ring-black/5"
+        >
+          Historique
+        </RouterLink>
+      </template>
+    </PageHeader>
 
     <div v-if="loading" class="py-16 text-center text-sm text-muted">Chargement…</div>
     <div v-else class="space-y-4">
