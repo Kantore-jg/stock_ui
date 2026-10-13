@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
@@ -34,6 +34,11 @@ const form = reactive({
   amount_received: '',
   tax_rate: '18',
 })
+
+const taxOptions = [
+  { value: '0', label: '0 % — Sans TVA' },
+  { value: '18', label: '18 % — TVA standard' },
+]
 
 const customerOptions = computed(() => [
   { value: '', label: 'Client passage' },
@@ -80,6 +85,16 @@ function addProduct(product) {
 function changeQty(line, delta) {
   line.quantity = Math.max(1, Number(line.quantity) + delta)
 }
+
+watch(
+  () => form.tax_rate,
+  (rate) => {
+    const value = Number(rate || 0)
+    lines.value.forEach((line) => {
+      line.tax_rate = value
+    })
+  },
+)
 
 function removeLine(index) {
   lines.value.splice(index, 1)
@@ -216,9 +231,14 @@ onMounted(load)
         </AppCard>
       </div>
 
+      <AppSelect v-model="form.tax_rate" label="TVA" :options="taxOptions" placeholder="Choisir la TVA" />
+
       <AppCard class="space-y-2 text-sm">
         <div class="flex justify-between"><span class="text-muted">Total HT</span><span>{{ formatMoney(subtotal, auth.currencyCode) }}</span></div>
-        <div class="flex justify-between"><span class="text-muted">TVA ({{ form.tax_rate }}%)</span><span>{{ formatMoney(taxAmount, auth.currencyCode) }}</span></div>
+        <div class="flex justify-between">
+          <span class="text-muted">TVA ({{ form.tax_rate }}%)</span>
+          <span>{{ formatMoney(taxAmount, auth.currencyCode) }}</span>
+        </div>
         <div class="flex justify-between border-t border-gray-100 pt-2 text-base font-bold">
           <span>Total TTC</span><span>{{ formatMoney(total, auth.currencyCode) }}</span>
         </div>
