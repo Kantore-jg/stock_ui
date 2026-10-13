@@ -27,6 +27,23 @@ const invoiceNumber = computed(
 )
 const items = computed(() => sale.value?.items || [])
 const currency = computed(() => auth.currencyCode)
+const customerName = computed(() => {
+  const saleCustomer = sale.value?.customer?.name
+  const snapshot = sale.value?.invoice?.customer_name_snapshot
+  if (saleCustomer) return saleCustomer
+  if (snapshot && snapshot !== 'Client comptoir') return snapshot
+  return snapshot || 'Client passage'
+})
+const customerDetails = computed(() => {
+  const customer = sale.value?.customer
+  const invoice = sale.value?.invoice
+  return {
+    phone: customer?.phone || null,
+    email: customer?.email || null,
+    address: customer?.address || invoice?.customer_address_snapshot || null,
+    tax: customer?.tax_number || invoice?.customer_tax_number_snapshot || null,
+  }
+})
 
 async function load() {
   loading.value = true
@@ -82,9 +99,10 @@ onMounted(load)
         <div class="grid grid-cols-2 gap-3 text-sm">
           <div>
             <p class="text-xs uppercase tracking-wide text-muted">Client</p>
-            <p class="font-semibold text-ink">
-              {{ sale.customer?.name || sale.invoice?.customer_name_snapshot || 'Client passage' }}
-            </p>
+            <p class="font-semibold text-ink">{{ customerName }}</p>
+            <p v-if="customerDetails.phone" class="text-xs text-muted">{{ customerDetails.phone }}</p>
+            <p v-if="customerDetails.email" class="text-xs text-muted">{{ customerDetails.email }}</p>
+            <p v-if="customerDetails.address" class="text-xs text-muted">{{ customerDetails.address }}</p>
           </div>
           <div class="text-right">
             <p class="text-xs uppercase tracking-wide text-muted">Magasin</p>

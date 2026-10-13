@@ -20,14 +20,34 @@ const firstName = computed(() => auth.user?.name?.split(' ')[0] || 'Utilisateur'
 const stockName = computed(() => stockStore.currentStock?.name || 'Aucun magasin')
 const currency = computed(() => auth.currencyCode)
 
+function toLocalDateKey(value) {
+  if (!value) return ''
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+    return value.slice(0, 10)
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function localDayKey(offsetFromToday = 0) {
+  const date = new Date()
+  date.setHours(12, 0, 0, 0)
+  date.setDate(date.getDate() + offsetFromToday)
+  return toLocalDateKey(date)
+}
+
+function isCountedSale(sale) {
+  return !['draft', 'cancelled'].includes(sale.status)
+}
+
 const todaySalesTotal = computed(() => {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDayKey(0)
   return sales.value
-    .filter(
-      (sale) =>
-        String(sale.sale_date || '').startsWith(today) &&
-        !['draft', 'cancelled'].includes(sale.status),
-    )
+    .filter((sale) => toLocalDateKey(sale.sale_date) === today && isCountedSale(sale))
     .reduce((sum, sale) => sum + Number(sale.total_amount || 0), 0)
 })
 
@@ -41,6 +61,14 @@ const lowStockCount = computed(
     }).length,
 )
 
+const stockMoneyValue = computed(() =>
+  stockItems.value.reduce((sum, item) => {
+    const qty = Number(item.quantity_available ?? item.quantity_on_hand ?? 0)
+    const price = Number(item.product?.selling_price || 0)
+    return sum + qty * price
+  }, 0),
+)
+
 const customerHint = computed(() => {
   const ids = new Set(sales.value.map((sale) => sale.customer_id).filter(Boolean))
   return ids.size
@@ -51,27 +79,27 @@ const expensesTotal = computed(() =>
 )
 
 const chartPoints = computed(() => {
-  const days = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date()
-    date.setDate(date.getDate() - (6 - index))
-    return date.toISOString().slice(0, 10)
-  })
+  const days = Array.from({ length: 7 }, (_, index) => localDayKey(index - 6))
   const totals = days.map((day) =>
     sales.value
-      .filter(
-        (sale) =>
-          String(sale.sale_date || '').startsWith(day) &&
-          !['draft', 'cancelled'].includes(sale.status),
-      )
+      .filter((sale) => toLocalDateKey(sale.sale_date) === day && isCountedSale(sale))
       .reduce((sum, sale) => sum + Number(sale.total_amount || 0), 0),
   )
   const max = Math.max(...totals, 1)
-  return totals.map((value, index) => ({
-    day: days[index].slice(8),
-    value,
-    height: Math.max(8, Math.round((value / max) * 100)),
-  }))
+  const labels = ['D', 'L', 'M', 'M', 'J', 'V', 'S']
+  return totals.map((value, index) => {
+    const date = new Date(`${days[index]}T12:00:00`)
+    return {
+      key: days[index],
+      label: labels[date.getDay()],
+      dayNum: days[index].slice(8),
+      value,
+      height: value > 0 ? Math.max(12, Math.round((value / max) * 100)) : 4,
+    }
+  })
 })
+
+const chartHasData = computed(() => chartPoints.value.some((point) => point.value > 0))
 
 const recent = computed(() => {
   const saleRows = sales.value.slice(0, 5).map((sale) => ({
@@ -146,9 +174,12 @@ onMounted(load)
         <p class="mt-2 text-lg font-bold">{{ formatMoney(todaySalesTotal, currency) }}</p>
       </AppCard>
       <AppCard class="!bg-brand-600 !text-white !ring-0">
-        <p class="text-xs text-white/80">Produits en stock</p>
-        <p class="mt-2 text-lg font-bold">{{ productCount }}</p>
-        <p v-if="lowStockCount" class="mt-1 text-[11px] text-white/80">{{ lowStockCount }} stock faible</p>
+        <p class="text-xs text-white/80">Valeur du stock</p>
+        <p class="mt-2 text-lg font-bold">{{ formatMoney(stockMoneyValue, currency) }}</p>
+        <p class="mt-1 text-[11px] text-white/80">
+          {{ productCount }} produit(s)
+          <span v-if="lowStockCount"> · {{ lowStockCount }} faible</span>
+        </p>
       </AppCard>
       <AppCard class="!bg-warning-500 !text-white !ring-0">
         <p class="text-xs text-white/80">Clients actifs</p>
@@ -165,12 +196,30 @@ onMounted(load)
         <h2 class="font-semibold text-ink">Évolution des ventes</h2>
         <span class="text-xs text-muted">7 jours</span>
       </div>
-      <div class="flex h-32 items-end gap-2">
-        <div v-for="point in chartPoints" :key="point.day" class="flex flex-1 flex-col items-center gap-2">
-          <div class="w-full rounded-t-lg bg-brand-500/90" :style="{ height: `${point.height}%` }" />
-          <span class="text-[10px] text-muted">{{ point.day }}</span>
+      <div class="flex h-36 items-end gap-2">
+        <div
+          v-for="point in chartPoints"
+          :key="point.key"
+          class="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
+          :title="`${point.key} · ${formatMoney(point.value, currency)}`"
+        >
+          <span class="max-w-full truncate text-[9px] font-medium text-muted">
+            {{ point.value > 0 ? formatMoney(point.value, currency).replace(/\s?BIF$/, '') : '' }}
+          </span>
+          <div class="flex w-full flex-1 items-end">
+            <div
+              class="w-full rounded-t-lg transition-all"
+              :class="point.value > 0 ? 'bg-brand-500' : 'bg-gray-200'"
+              :style="{ height: `${point.height}%` }"
+            />
+          </div>
+          <span class="text-[10px] font-semibold text-ink">{{ point.label }}</span>
+          <span class="text-[9px] text-muted">{{ point.dayNum }}</span>
         </div>
       </div>
+      <p v-if="!chartHasData && !loading" class="mt-3 text-center text-xs text-muted">
+        Aucune vente sur les 7 derniers jours
+      </p>
     </AppCard>
 
     <div class="mb-2 flex items-center justify-between">

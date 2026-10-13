@@ -22,7 +22,10 @@ defineEmits(['update:modelValue'])
       :class="error ? 'border-danger-500' : ''"
       @change="$emit('update:modelValue', $event.target.value)"
     >
-      <option v-if="allowEmpty || placeholder" value="" :disabled="!allowEmpty">
+      <option v-if="allowEmpty" value="">
+        {{ placeholder || 'Sélectionner' }}
+      </option>
+      <option v-else-if="placeholder && (modelValue === '' || modelValue === null || modelValue === undefined)" value="" disabled>
         {{ placeholder }}
       </option>
       <option v-for="option in options" :key="String(option.value)" :value="option.value">

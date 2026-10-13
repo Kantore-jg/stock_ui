@@ -42,6 +42,26 @@ const filtered = computed(() =>
   }),
 )
 
+function productStockValue(product) {
+  const qty = Number(qtyByProduct.value[product.id] ?? 0)
+  return qty * Number(product.selling_price || 0)
+}
+
+function productPurchaseValue(product) {
+  const qty = Number(qtyByProduct.value[product.id] ?? 0)
+  return qty * Number(product.purchase_price || 0)
+}
+
+const stockValueSale = computed(() =>
+  products.value.reduce((sum, product) => sum + productStockValue(product), 0),
+)
+const stockValuePurchase = computed(() =>
+  products.value.reduce((sum, product) => sum + productPurchaseValue(product), 0),
+)
+const unitsInStock = computed(() =>
+  products.value.reduce((sum, product) => sum + Number(qtyByProduct.value[product.id] ?? 0), 0),
+)
+
 function stockTone(product) {
   const qty = Number(qtyByProduct.value[product.id] ?? 0)
   const min = Number(product.min_stock_level ?? 0)
@@ -111,6 +131,25 @@ onMounted(load)
 
     <SearchBar v-model="search" placeholder="Rechercher un produit…" show-scan class="mb-3" />
 
+    <div class="mb-4 grid grid-cols-2 gap-2">
+      <AppCard class="!p-3">
+        <p class="text-[11px] text-muted">Valeur stock (vente)</p>
+        <p class="mt-1 text-sm font-bold text-brand-700">
+          {{ formatMoney(stockValueSale, auth.currencyCode) }}
+        </p>
+        <p class="text-[11px] text-muted">{{ unitsInStock }} unité(s)</p>
+      </AppCard>
+      <AppCard class="!p-3">
+        <p class="text-[11px] text-muted">Valeur stock (achat)</p>
+        <p class="mt-1 text-sm font-bold text-ink">
+          {{ formatMoney(stockValuePurchase, auth.currencyCode) }}
+        </p>
+        <p class="text-[11px] text-muted">
+          Marge {{ formatMoney(stockValueSale - stockValuePurchase, auth.currencyCode) }}
+        </p>
+      </AppCard>
+    </div>
+
     <div class="mb-4 flex gap-2 overflow-x-auto pb-1">
       <button
         v-for="item in filters"
@@ -145,9 +184,16 @@ onMounted(load)
               </div>
               <AppBadge :tone="stockTone(product)">{{ stockLabel(product) }}</AppBadge>
             </div>
-            <p class="mt-2 text-sm font-bold text-brand-700">
-              {{ formatMoney(product.selling_price, auth.currencyCode) }}
-            </p>
+            <div class="mt-2 flex items-end justify-between gap-2">
+              <p class="text-sm font-bold text-brand-700">
+                {{ formatMoney(product.selling_price, auth.currencyCode) }}
+                <span class="text-[11px] font-medium text-muted">/ u.</span>
+              </p>
+              <p class="text-xs font-semibold text-ink">
+                Stock
+                {{ formatMoney(productStockValue(product), auth.currencyCode) }}
+              </p>
+            </div>
           </div>
         </div>
       </AppCard>

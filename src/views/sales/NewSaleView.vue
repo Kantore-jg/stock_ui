@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
@@ -22,6 +22,8 @@ const router = useRouter()
 
 const loading = ref(true)
 const saving = ref(false)
+const creatingCustomer = ref(false)
+const showCustomerForm = ref(false)
 const search = ref('')
 const customers = ref([])
 const products = ref([])
@@ -35,18 +37,30 @@ const form = reactive({
   tax_rate: '18',
 })
 
+const newCustomer = reactive({
+  name: '',
+  phone: '',
+  email: '',
+})
+
 const taxOptions = [
   { value: '0', label: '0 % — Sans TVA' },
   { value: '18', label: '18 % — TVA standard' },
 ]
 
-const customerOptions = computed(() => [
-  { value: '', label: 'Client passage' },
-  ...customers.value.map((item) => ({ value: item.id, label: item.name })),
-])
-const paymentOptions = computed(() =>
-  paymentMethods.value.map((item) => ({ value: item.id, label: item.name })),
+const customerOptions = computed(() =>
+  customers.value.map((item) => ({
+    value: String(item.id),
+    label: item.phone ? `${item.name} · ${item.phone}` : item.name,
+  })),
 )
+const paymentOptions = computed(() =>
+  paymentMethods.value.map((item) => ({ value: String(item.id), label: item.name })),
+)
+const selectedCustomerName = computed(() => {
+  if (!form.customer_id) return 'Client passage'
+  return customers.value.find((item) => String(item.id) === String(form.customer_id))?.name || 'Client'
+})
 
 const filteredProducts = computed(() => {
   const q = search.value.trim().toLowerCase()
@@ -100,22 +114,55 @@ function removeLine(index) {
   lines.value.splice(index, 1)
 }
 
+async function loadCustomers() {
+  customers.value = unwrapList(await customersApi.list({ per_page: 100 }))
+}
+
 async function load() {
   loading.value = true
   try {
-    const [customersRes, productsRes, methodsRes] = await Promise.all([
-      customersApi.list({ per_page: 100 }),
+    const [productsRes, methodsRes] = await Promise.all([
       productsApi.list({ per_page: 100 }),
       paymentMethodsApi.list(),
+      loadCustomers(),
     ])
-    customers.value = unwrapList(customersRes)
     products.value = unwrapList(productsRes)
     paymentMethods.value = unwrapList(methodsRes)
-    if (paymentMethods.value[0]) form.payment_method_id = paymentMethods.value[0].id
+    if (paymentMethods.value[0] && !form.payment_method_id) {
+      form.payment_method_id = String(paymentMethods.value[0].id)
+    }
   } catch (error) {
     ui.error(error.message || 'Chargement impossible')
   } finally {
     loading.value = false
+  }
+}
+
+async function createCustomerInline() {
+  if (!newCustomer.name.trim()) {
+    ui.error('Nom du client requis')
+    return
+  }
+  creatingCustomer.value = true
+  try {
+    const created = unwrapItem(
+      await customersApi.create({
+        name: newCustomer.name.trim(),
+        phone: newCustomer.phone || null,
+        email: newCustomer.email || null,
+      }),
+    )
+    await loadCustomers()
+    form.customer_id = String(created.id)
+    newCustomer.name = ''
+    newCustomer.phone = ''
+    newCustomer.email = ''
+    showCustomerForm.value = false
+    ui.success(`Client « ${created.name} » ajouté`)
+  } catch (error) {
+    ui.error(error.message || 'Création client impossible')
+  } finally {
+    creatingCustomer.value = false
   }
 }
 
@@ -134,14 +181,15 @@ async function submit() {
       auth.company?.default_currency_id ||
       auth.company?.default_currency?.id ||
       products.value[0]?.currency_id
+    const customerId = form.customer_id ? Number(form.customer_id) : null
     const created = unwrapItem(
       await salesApi.create({
-        stock_id: stockStore.currentStockId,
-        customer_id: form.customer_id ? Number(form.customer_id) : null,
+        stock_id: Number(stockStore.currentStockId),
+        customer_id: customerId,
         sale_date: new Date().toISOString().slice(0, 10),
         currency_id: Number(currencyId),
         items: lines.value.map((line) => ({
-          product_id: line.product_id,
+          product_id: Number(line.product_id),
           quantity: Number(line.quantity),
           unit_price: Number(line.unit_price),
           tax_rate: Number(line.tax_rate || form.tax_rate || 0),
@@ -158,7 +206,7 @@ async function submit() {
         currency_id: Number(currencyId),
       })
     }
-    ui.success('Vente validée')
+    ui.success(`Vente validée · ${selectedCustomerName.value}`)
     router.push({ name: 'invoice', params: { id: validated.id || created.id } })
   } catch (error) {
     ui.error(error.message || 'Validation impossible')
@@ -168,6 +216,7 @@ async function submit() {
 }
 
 onMounted(load)
+onActivated(loadCustomers)
 </script>
 
 <template>
@@ -187,15 +236,38 @@ onMounted(load)
     <div v-else class="space-y-4">
       <div class="flex items-end gap-2">
         <div class="flex-1">
-          <AppSelect v-model="form.customer_id" label="Client" :options="customerOptions" placeholder="Client" />
+          <AppSelect
+            v-model="form.customer_id"
+            label="Client"
+            :options="customerOptions"
+            placeholder="Client passage"
+            allow-empty
+          />
         </div>
-        <RouterLink
-          :to="{ name: 'customers' }"
+        <button
+          type="button"
           class="mb-0.5 flex size-11 items-center justify-center rounded-xl bg-brand-600 text-xl text-white"
+          aria-label="Nouveau client"
+          @click="showCustomerForm = !showCustomerForm"
         >
           +
-        </RouterLink>
+        </button>
       </div>
+
+      <AppCard v-if="showCustomerForm" class="space-y-3">
+        <h3 class="font-semibold text-ink">Nouveau client</h3>
+        <AppInput v-model="newCustomer.name" label="Nom" placeholder="Nom du client" />
+        <AppInput v-model="newCustomer.phone" label="Téléphone" />
+        <AppInput v-model="newCustomer.email" label="Email" type="email" />
+        <div class="grid grid-cols-2 gap-2">
+          <AppButton variant="secondary" @click="showCustomerForm = false">Annuler</AppButton>
+          <AppButton :loading="creatingCustomer" @click="createCustomerInline">Ajouter</AppButton>
+        </div>
+      </AppCard>
+
+      <p v-if="form.customer_id" class="text-xs text-muted">
+        Client sélectionné : <span class="font-semibold text-ink">{{ selectedCustomerName }}</span>
+      </p>
 
       <SearchBar v-model="search" placeholder="Ajouter un produit…" show-scan />
       <div v-if="search || !lines.length" class="space-y-2">
