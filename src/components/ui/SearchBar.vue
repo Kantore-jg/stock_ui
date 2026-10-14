@@ -19,14 +19,14 @@ defineEmits(['update:modelValue', 'scan'])
       <input
         :value="modelValue"
         :placeholder="placeholder"
-        class="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+        class="w-full rounded-xl border border-border bg-card py-3 pl-10 pr-3 text-sm text-ink outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:focus:ring-brand-900"
         @input="$emit('update:modelValue', $event.target.value)"
       />
     </div>
     <button
       v-if="showScan"
       type="button"
-      class="flex size-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-brand-600"
+      class="flex size-11 items-center justify-center rounded-xl border border-border bg-card text-brand-600"
       aria-label="Scanner"
       @click="$emit('scan')"
     >

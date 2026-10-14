@@ -16,7 +16,7 @@ const tabs = [
 
 <template>
   <nav
-    class="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur"
+    class="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur"
   >
     <div class="phone-shell grid grid-cols-5 px-1 pt-2 pb-1">
       <RouterLink
@@ -28,7 +28,7 @@ const tabs = [
       >
         <span
           class="flex size-8 items-center justify-center rounded-xl"
-          :class="active === tab.id ? 'bg-brand-50' : ''"
+          :class="active === tab.id ? 'bg-brand-50 dark:bg-brand-900/50' : ''"
         >
           <svg
             v-if="tab.icon === 'home'"

@@ -137,6 +137,7 @@ async function load() {
 }
 
 async function submit() {
+  if (saving.value) return
   if (!lines.value.length) {
     ui.error('Ajoutez au moins un produit')
     return

@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-brand-50: #eff6ff;
   --color-brand-100: #dbeafe;
@@ -26,12 +28,34 @@
   --color-warning-500: #f97316;
   --color-warning-600: #ea580c;
 
-  --color-surface: #f3f4f6;
-  --color-ink: #111827;
-  --color-muted: #6b7280;
+  --color-surface: var(--app-surface);
+  --color-card: var(--app-card);
+  --color-border: var(--app-border);
+  --color-ink: var(--app-ink);
+  --color-muted: var(--app-muted);
 
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   --radius-card: 1rem;
+}
+
+:root {
+  --app-surface: #f3f4f6;
+  --app-card: #ffffff;
+  --app-border: #e5e7eb;
+  --app-ink: #111827;
+  --app-muted: #6b7280;
+}
+
+html.dark {
+  --app-surface: #0f172a;
+  --app-card: #1e293b;
+  --app-border: #334155;
+  --app-ink: #f1f5f9;
+  --app-muted: #94a3b8;
+  --color-brand-50: #172554;
+  --color-success-50: #064e3b;
+  --color-danger-50: #7f1d1d;
+  --color-warning-50: #7c2d12;
 }
 
 @layer base {
@@ -47,8 +71,8 @@
   body {
     margin: 0;
     font-family: var(--font-sans);
-    background: var(--color-surface);
-    color: var(--color-ink);
+    background: var(--app-surface);
+    color: var(--app-ink);
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
   }

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
@@ -34,7 +34,6 @@ const form = reactive({
   customer_id: '',
   payment_method_id: '',
   amount_received: '',
-  tax_rate: '18',
 })
 
 const newCustomer = reactive({
@@ -43,10 +42,11 @@ const newCustomer = reactive({
   email: '',
 })
 
-const taxOptions = [
-  { value: '0', label: '0 % — Sans TVA' },
-  { value: '18', label: '18 % — TVA standard' },
-]
+function productTaxRate(product) {
+  const label = product?.product_label
+  if (!label || label.is_tax_exempt) return 0
+  return Number(label.default_tax_rate || 0)
+}
 
 const customerOptions = computed(() =>
   customers.value.map((item) => ({
@@ -57,6 +57,14 @@ const customerOptions = computed(() =>
 const paymentOptions = computed(() =>
   paymentMethods.value.map((item) => ({ value: String(item.id), label: item.name })),
 )
+const selectedPaymentMethod = computed(() =>
+  paymentMethods.value.find((item) => String(item.id) === String(form.payment_method_id)),
+)
+const isCreditSale = computed(() => {
+  const code = String(selectedPaymentMethod.value?.code || '').toLowerCase()
+  const name = String(selectedPaymentMethod.value?.name || '').toLowerCase()
+  return code === 'credit' || name.includes('crédit') || name.includes('credit')
+})
 const selectedCustomerName = computed(() => {
   if (!form.customer_id) return 'Client passage'
   return customers.value.find((item) => String(item.id) === String(form.customer_id))?.name || 'Client'
@@ -77,8 +85,19 @@ const filteredProducts = computed(() => {
 const subtotal = computed(() =>
   lines.value.reduce((sum, line) => sum + Number(line.unit_price) * Number(line.quantity), 0),
 )
-const taxAmount = computed(() => (subtotal.value * Number(form.tax_rate || 0)) / 100)
+const taxAmount = computed(() =>
+  lines.value.reduce((sum, line) => {
+    const lineHt = Number(line.unit_price) * Number(line.quantity)
+    return sum + (lineHt * Number(line.tax_rate || 0)) / 100
+  }, 0),
+)
 const total = computed(() => subtotal.value + taxAmount.value)
+const avgTaxLabel = computed(() => {
+  if (!lines.value.length) return '—'
+  const rates = [...new Set(lines.value.map((line) => Number(line.tax_rate || 0)))]
+  if (rates.length === 1) return `${rates[0]} %`
+  return 'mixte'
+})
 
 function addProduct(product) {
   const existing = lines.value.find((line) => line.product_id === product.id)
@@ -91,7 +110,8 @@ function addProduct(product) {
     name: product.name,
     unit_price: Number(product.selling_price || 0),
     quantity: 1,
-    tax_rate: Number(form.tax_rate || 0),
+    tax_rate: productTaxRate(product),
+    tax_label: product.product_label?.name || 'Sans TVA',
   })
   search.value = ''
 }
@@ -99,16 +119,6 @@ function addProduct(product) {
 function changeQty(line, delta) {
   line.quantity = Math.max(1, Number(line.quantity) + delta)
 }
-
-watch(
-  () => form.tax_rate,
-  (rate) => {
-    const value = Number(rate || 0)
-    lines.value.forEach((line) => {
-      line.tax_rate = value
-    })
-  },
-)
 
 function removeLine(index) {
   lines.value.splice(index, 1)
@@ -128,8 +138,12 @@ async function load() {
     ])
     products.value = unwrapList(productsRes)
     paymentMethods.value = unwrapList(methodsRes)
-    if (paymentMethods.value[0] && !form.payment_method_id) {
-      form.payment_method_id = String(paymentMethods.value[0].id)
+    if (!form.payment_method_id && paymentMethods.value.length) {
+      const cash =
+        paymentMethods.value.find((item) => String(item.code).toLowerCase() === 'cash') ||
+        paymentMethods.value.find((item) => String(item.code).toLowerCase() !== 'credit') ||
+        paymentMethods.value[0]
+      form.payment_method_id = String(cash.id)
     }
   } catch (error) {
     ui.error(error.message || 'Chargement impossible')
@@ -166,17 +180,22 @@ async function createCustomerInline() {
   }
 }
 
+function roundMoney(value) {
+  return Math.round(Number(value || 0) * 10000) / 10000
+}
+
 async function submit() {
-  if (!stockStore.currentStockId) {
-    ui.error('Aucun magasin sélectionné')
-    return
-  }
-  if (!lines.value.length) {
-    ui.error('Ajoutez au moins un produit')
-    return
-  }
+  if (saving.value) return
   saving.value = true
   try {
+    if (!stockStore.currentStockId) {
+      ui.error('Aucun magasin sélectionné')
+      return
+    }
+    if (!lines.value.length) {
+      ui.error('Ajoutez au moins un produit')
+      return
+    }
     const currencyId =
       auth.company?.default_currency_id ||
       auth.company?.default_currency?.id ||
@@ -192,22 +211,40 @@ async function submit() {
           product_id: Number(line.product_id),
           quantity: Number(line.quantity),
           unit_price: Number(line.unit_price),
-          tax_rate: Number(line.tax_rate || form.tax_rate || 0),
         })),
       }),
     )
     const validated = unwrapItem(await salesApi.validate(created.id))
-    const amount = Number(form.amount_received || total.value)
-    if (amount > 0 && form.payment_method_id) {
-      await salesApi.addPayment(validated.id || created.id, {
-        payment_method_id: Number(form.payment_method_id),
-        amount,
-        payment_date: new Date().toISOString().slice(0, 10),
-        currency_id: Number(currencyId),
-      })
+    const due = roundMoney(validated.balance_due ?? validated.total_amount ?? 0)
+
+    // À crédit : aucun encaissement — la facture reste due / non payée.
+    if (!isCreditSale.value) {
+      const tenderedRaw = form.amount_received
+      const tendered =
+        tenderedRaw === '' || tenderedRaw === null || tenderedRaw === undefined
+          ? due
+          : roundMoney(tenderedRaw)
+      const amount = roundMoney(Math.min(Math.max(0, tendered), due))
+      if (amount > 0 && form.payment_method_id) {
+        await salesApi.addPayment(validated.id || created.id, {
+          payment_method_id: Number(form.payment_method_id),
+          amount,
+          payment_date: new Date().toISOString().slice(0, 10),
+          currency_id: Number(currencyId),
+        })
+      }
+      const change = roundMoney(Math.max(0, tendered - due))
+      ui.success(
+        change > 0
+          ? `Vente validée · monnaie ${formatMoney(change, auth.currencyCode)}`
+          : `Vente validée · ${selectedCustomerName.value}`,
+      )
+    } else {
+      ui.success(`Vente à crédit · reste dû ${formatMoney(due, auth.currencyCode)}`)
     }
-    ui.success(`Vente validée · ${selectedCustomerName.value}`)
-    router.push({ name: 'invoice', params: { id: validated.id || created.id } })
+    lines.value = []
+    form.amount_received = ''
+    await router.push({ name: 'invoice', params: { id: validated.id || created.id } })
   } catch (error) {
     ui.error(error.message || 'Validation impossible')
   } finally {
@@ -293,7 +330,10 @@ onActivated(loadCustomers)
           <div class="flex items-start justify-between gap-2">
             <div>
               <p class="font-semibold text-ink">{{ line.name }}</p>
-              <p class="text-xs text-muted">{{ formatMoney(line.unit_price, auth.currencyCode) }}</p>
+              <p class="text-xs text-muted">
+                {{ formatMoney(line.unit_price, auth.currencyCode) }}
+                · TVA {{ line.tax_rate || 0 }}%
+              </p>
             </div>
             <button type="button" class="text-danger-600" @click="removeLine(index)">
               <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
@@ -312,23 +352,41 @@ onActivated(loadCustomers)
         </AppCard>
       </div>
 
-      <AppSelect v-model="form.tax_rate" label="TVA" :options="taxOptions" placeholder="Choisir la TVA" />
-
       <AppCard class="space-y-2 text-sm">
         <div class="flex justify-between"><span class="text-muted">Total HT</span><span>{{ formatMoney(subtotal, auth.currencyCode) }}</span></div>
         <div class="flex justify-between">
-          <span class="text-muted">TVA ({{ form.tax_rate }}%)</span>
+          <span class="text-muted">TVA ({{ avgTaxLabel }})</span>
           <span>{{ formatMoney(taxAmount, auth.currencyCode) }}</span>
         </div>
-        <div class="flex justify-between border-t border-gray-100 pt-2 text-base font-bold">
+        <div class="flex justify-between border-t border-border pt-2 text-base font-bold">
           <span>Total TTC</span><span>{{ formatMoney(total, auth.currencyCode) }}</span>
         </div>
+        <p class="text-[11px] text-muted">La TVA vient du paramétrage de chaque produit.</p>
       </AppCard>
 
       <AppSelect v-model="form.payment_method_id" label="Mode de paiement" :options="paymentOptions" />
-      <AppInput v-model="form.amount_received" label="Montant reçu" type="number" :placeholder="String(total)" />
+      <p v-if="isCreditSale" class="rounded-xl bg-warning-50 px-3 py-2 text-xs text-warning-600">
+        Mode à crédit : aucun paiement ne sera enregistré. La facture restera due.
+      </p>
+      <template v-else>
+        <AppInput
+          v-model="form.amount_received"
+          label="Montant reçu"
+          type="number"
+          :placeholder="String(total)"
+        />
+        <p
+          v-if="form.amount_received !== '' && Number(form.amount_received) > total"
+          class="text-xs text-muted"
+        >
+          Monnaie à rendre :
+          {{ formatMoney(Number(form.amount_received) - total, auth.currencyCode) }}
+        </p>
+      </template>
 
-      <AppButton block :loading="saving" @click="submit">Valider la vente</AppButton>
+      <AppButton block :loading="saving" :disabled="saving" @click="submit">
+        Valider la vente
+      </AppButton>
     </div>
   </div>
 </template>

@@ -150,7 +150,7 @@ onMounted(load)
 
 <template>
   <div>
-    <header class="mb-5 flex items-center justify-between gap-3">
+    <header class="mb-5">
       <div class="flex items-center gap-3">
         <div class="flex size-11 items-center justify-center rounded-full bg-brand-600 text-sm font-bold text-white">
           {{ firstName.slice(0, 1).toUpperCase() }}
@@ -161,11 +161,6 @@ onMounted(load)
           <p class="text-xs text-muted">{{ stockName }}</p>
         </div>
       </div>
-      <button type="button" class="flex size-10 items-center justify-center rounded-full bg-white text-ink shadow-sm ring-1 ring-black/5">
-        <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 1 1-6 0" />
-        </svg>
-      </button>
     </header>
 
     <div class="mb-5 grid grid-cols-2 gap-3">

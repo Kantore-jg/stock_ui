@@ -18,7 +18,7 @@ defineEmits(['update:modelValue'])
     <select
       :value="modelValue"
       :disabled="disabled"
-      class="w-full appearance-none rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-gray-50"
+      class="w-full appearance-none rounded-xl border border-border bg-card px-3.5 py-3 text-sm text-ink outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:opacity-60 dark:focus:ring-brand-900"
       :class="error ? 'border-danger-500' : ''"
       @change="$emit('update:modelValue', $event.target.value)"
     >

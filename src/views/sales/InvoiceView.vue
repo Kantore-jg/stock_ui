@@ -45,6 +45,16 @@ const customerDetails = computed(() => {
   }
 })
 
+const paymentStatusLabel = computed(() => {
+  const balance = Number(sale.value?.balance_due || 0)
+  const paid = Number(sale.value?.amount_paid || 0)
+  if (sale.value?.status === 'cancelled') return 'Annulée'
+  if (balance <= 0 && paid > 0) return 'Payée'
+  if (paid > 0) return 'Partiellement payée'
+  if (balance > 0) return 'À crédit / Impayée'
+  return 'Validée'
+})
+
 async function load() {
   loading.value = true
   try {
@@ -148,6 +158,15 @@ onMounted(load)
           <div class="flex justify-between text-base font-bold"><span>Total TTC</span><span>{{ formatMoney(sale.total_amount, currency) }}</span></div>
           <div class="flex justify-between"><span class="text-muted">Payé</span><span class="text-success-700">{{ formatMoney(sale.amount_paid, currency) }}</span></div>
           <div class="flex justify-between"><span class="text-muted">Reste</span><span class="text-danger-600">{{ formatMoney(sale.balance_due, currency) }}</span></div>
+          <div class="flex justify-between pt-1">
+            <span class="text-muted">Statut</span>
+            <span
+              class="font-semibold"
+              :class="Number(sale.balance_due) > 0 ? 'text-warning-600' : 'text-success-700'"
+            >
+              {{ paymentStatusLabel }}
+            </span>
+          </div>
         </div>
 
         <div class="rounded-lg bg-surface px-3 py-4 text-center font-mono text-xs tracking-[0.35em] text-muted">

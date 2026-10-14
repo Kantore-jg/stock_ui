@@ -55,7 +55,13 @@ const categoryOptions = computed(() =>
   categories.value.map((item) => ({ value: item.id, label: item.name })),
 )
 const labelOptions = computed(() =>
-  labels.value.map((item) => ({ value: item.id, label: item.name })),
+  labels.value.map((item) => {
+    const rate = item.is_tax_exempt ? 0 : Number(item.default_tax_rate || 0)
+    return {
+      value: item.id,
+      label: `${item.name} · ${rate} %`,
+    }
+  }),
 )
 const unitOptions = computed(() =>
   units.value.map((item) => ({ value: item.id, label: item.name || item.code })),
@@ -281,10 +287,18 @@ onMounted(loadProduct)
         <AppInput v-model="form.name" label="Libellé" />
         <AppInput v-model="form.sku" label="SKU / Code" />
         <AppSelect v-model="form.category_id" label="Catégorie" :options="categoryOptions" />
-        <AppSelect v-model="form.product_label_id" label="Étiquette" :options="labelOptions" />
+        <AppSelect
+          v-model="form.product_label_id"
+          label="TVA du produit"
+          :options="labelOptions"
+          placeholder="Choisir la TVA"
+        />
+        <p class="text-xs text-muted -mt-1">
+          Cette TVA sera appliquée automatiquement à chaque vente de ce produit.
+        </p>
         <div class="grid grid-cols-2 gap-3">
-          <AppInput v-model="form.purchase_price" label="Prix d'achat" type="number" />
-          <AppInput v-model="form.selling_price" label="Prix de vente" type="number" />
+          <AppInput v-model="form.purchase_price" label="Prix d'achat (HT)" type="number" />
+          <AppInput v-model="form.selling_price" label="Prix de vente (HT)" type="number" />
         </div>
         <AppSelect v-model="form.unit_id" label="Unité" :options="unitOptions" />
         <AppInput v-model="form.barcode" label="Code-barres" />

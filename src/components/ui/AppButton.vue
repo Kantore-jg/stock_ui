@@ -16,9 +16,9 @@ defineProps({
       block ? 'w-full' : '',
       variant === 'primary' && 'bg-brand-600 text-white shadow-sm shadow-brand-600/25 hover:bg-brand-700',
       variant === 'danger' && 'bg-danger-600 text-white hover:bg-danger-700',
-      variant === 'ghost' && 'bg-transparent text-brand-700 hover:bg-brand-50',
-      variant === 'secondary' && 'bg-white text-ink border border-gray-200 hover:bg-gray-50',
-      variant === 'soft' && 'bg-brand-50 text-brand-700 hover:bg-brand-100',
+      variant === 'ghost' && 'bg-transparent text-brand-700 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-900/40',
+      variant === 'secondary' && 'bg-card text-ink border border-border hover:bg-surface',
+      variant === 'soft' && 'bg-brand-50 text-brand-700 hover:bg-brand-100 dark:text-brand-200',
     ]"
     :disabled="disabled || loading"
   >

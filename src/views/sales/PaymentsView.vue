@@ -68,10 +68,18 @@ async function load() {
 }
 
 async function submit() {
+  if (saving.value) return
   saving.value = true
   try {
+    const due = Math.round(Number(sale.value?.balance_due || 0) * 10000) / 10000
+    const requested = Math.round(Number(form.amount || 0) * 10000) / 10000
+    const amount = Math.min(Math.max(0, requested), due)
+    if (amount <= 0) {
+      ui.error('Montant invalide ou solde déjà réglé')
+      return
+    }
     await salesApi.addPayment(route.params.id, {
-      amount: Number(form.amount),
+      amount,
       payment_method_id: Number(form.payment_method_id),
       reference: form.reference || null,
       payment_date: form.payment_date,

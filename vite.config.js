@@ -54,6 +54,9 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           navigateFallback: '/index.html',
+          // Ne pas intercepter les modules Vite / HMR / outils de dev.
+          navigateFallbackDenylist: [/^\/@/, /^\/src\//, /^\/node_modules\//, /^\/api\//],
+          globIgnores: ['**/node_modules/**/*', 'sw.js', 'workbox-*.js'],
           runtimeCaching: [
             {
               urlPattern: ({ url, request }) =>
@@ -70,10 +73,10 @@ export default defineConfig(({ mode }) => {
             },
           ],
         },
+        // SW désactivé en dev : il cassait Vite (page blanche + erreurs Workbox).
+        // Le PWA reste actif uniquement en build/prod.
         devOptions: {
-          enabled: true,
-          type: 'module',
-          navigateFallback: 'index.html',
+          enabled: false,
         },
       }),
     ],
