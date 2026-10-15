@@ -150,18 +150,18 @@ onMounted(load)
 
 <template>
   <div>
-    <header class="mb-5">
+    <!-- <header class="mb-5">
       <div class="flex items-center gap-3">
         <div class="flex size-11 items-center justify-center rounded-full bg-brand-600 text-sm font-bold text-white">
           {{ firstName.slice(0, 1).toUpperCase() }}
-        </div>
-        <div>
+        </div> -->
+        <!-- <div>
           <p class="text-sm text-muted">Bonjour,</p>
           <h1 class="text-lg font-bold text-ink">{{ firstName }}</h1>
           <p class="text-xs text-muted">{{ stockName }}</p>
-        </div>
-      </div>
-    </header>
+        </div> -->
+      <!-- </div>
+    </header> -->
 
     <div class="mb-5 grid grid-cols-2 gap-3">
       <AppCard class="!bg-success-600 !text-white !ring-0">
